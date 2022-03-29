@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+passenger_wsgi.py
+sqlite3.db
+django_knowledge_telegram_bot/tmp/restart.txt
+.env
