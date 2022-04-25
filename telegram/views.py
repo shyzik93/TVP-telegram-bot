@@ -1,16 +1,29 @@
-import os
-
 from django.conf import settings
-from django.utils.encoding import uri_to_iri
 from rest_framework.decorators import api_view, renderer_classes
 from rest_framework.response import Response
 from rest_framework.renderers import JSONRenderer
 from rest_framework import status
 import requests
 
-from note.load_from_github import prepare_to_search, get_root_url, search
-from note.credentials import args_uploader
-from note.models import Note
+
+class ApiKnowledge:
+    def __init__(self):
+        self.url = 'https://venusexperiment.ru/api/v1/note/'
+
+    def note_search(self, query, search_by='all', operator='or', limit=10, offset=0, fields='title', source=None):
+        params = {
+            'query': query,
+            'search-by': search_by,
+            'operator': operator,
+            'limit': limit,
+            'offset': offset,
+            'fields': fields,
+        }
+        if source:
+            params['source'] = source
+
+        response = requests.get(self.url, params=params)
+        return response.json()
 
 
 @api_view(('POST',))
@@ -29,29 +42,13 @@ def telegram_hook(request, token):
             #_, query = message_text.split(None, 1)
             query = message_text
 
-            operator = 'or'
-            limit = 10
-            offset = 0
-            fields = 'title'
-            search_by = 'all'
-            file_name = query if search_by in ('title', 'all') else None
-            file_content = query if search_by in ('content', 'all') else None
-            fields = ('title', 'content') if fields == 'all' else (fields,)
-            uploader = settings.DEFAULT_UPLOADER
-            result_data = search(
-                uploader,
-                args_uploader[uploader],
-                operator=operator,
-                limit=limit,
-                offset=offset,
-                fields=fields,
-                file_name=file_name,
-                file_content=file_content,
-            )
+            api_knowledge = ApiKnowledge()
+            result_data = api_knowledge.note_search(query)
 
             links = []
             github_url = result_data['path']
-            for index, result in enumerate(result_data['results'], 1):
+            results = result_data['results']
+            for index, result in enumerate(results, 1):
                 title = result['title']
                 links.append(f'{index}. [{title}]({github_url}{title}.md)')
 
