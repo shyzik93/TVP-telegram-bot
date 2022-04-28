@@ -41,9 +41,9 @@ def build_message_body(result_data, numeration_from=1):
     return f'Найдено результатов: {count}\n\n{links}'
 
 
-def build_paginator_params(count_objects, limit, offset, results_message_id):
-    page_count = count_objects // limit + (1 if count_objects % limit > 0 else 0)
-    page_num = offset // limit + 1
+def build_paginator_params(count_objects, objects_per_page, offset):
+    page_count = count_objects // objects_per_page + (1 if count_objects % objects_per_page > 0 else 0)
+    page_num = offset // objects_per_page + 1
     btn_count_pages = {
         'text': f'{page_num}/{page_count}',
         'callback_data': 'none',
@@ -51,12 +51,12 @@ def build_paginator_params(count_objects, limit, offset, results_message_id):
 
     btn_prev = {
         'text': '<< prev' if page_num > 1 else ' ',
-        'callback_data': f'{offset - limit} {results_message_id}' if page_num > 1 else 'none',
+        'callback_data': f'{offset - objects_per_page}' if page_num > 1 else 'none',
     }
 
     btn_next = {
         'text': 'next >>' if page_num < page_count else ' ',
-        'callback_data': f'{offset + limit} {results_message_id}' if page_num < page_count else 'none',
+        'callback_data': f'{offset + objects_per_page}' if page_num < page_count else 'none',
     }
 
     return {
@@ -84,7 +84,7 @@ def telegram_hook(request, token):
 
             limit = 10
             offset = 0
-            reply_markup = build_paginator_params(result_data['count'], limit, offset, message_id)
+            reply_markup = build_paginator_params(result_data['count'], limit, offset)
             params = {
                 'chat_id': chat_from['id'],
                 'text': build_message_body(result_data),
@@ -97,20 +97,18 @@ def telegram_hook(request, token):
 
     callback_query = request.data.get('callback_query')
     if callback_query:
-        results_message = callback_query['message']
-        results_message_id = results_message['message_id']
         if callback_query['data'] == 'none':
             return Response(status=status.HTTP_200_OK, data={})
 
-        offset, query_message_id = callback_query['data'].split()
-        offset = int(offset)
+        results_message = callback_query['message']
+        offset = int(callback_query['data'])
 
         query = results_message['reply_to_message']['text']
         api_knowledge = ApiKnowledge()
         result_data = api_knowledge.note_search(query, offset=int(offset))
 
         limit = 10
-        reply_markup = build_paginator_params(result_data['count'], limit, offset, results_message_id)
+        reply_markup = build_paginator_params(result_data['count'], limit, offset)
         params = {
             'chat_id': results_message.get('chat').get('id'),
             'message_id': results_message.get('message_id'),
