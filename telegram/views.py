@@ -8,11 +8,10 @@ import requests
 
 class ApiKnowledge:
     def __init__(self):
-        self.url = 'https://venusexperiment.ru/api/v1/note/'
+        self.url = f'{settings.URL_KNOWLEDGE}/api/v1/note/'
 
     def note_search(self, query, search_by='all', operator='or', limit=10, offset=0, fields='title', source=None):
         params = {
-            'query': query,
             'search-by': search_by,
             'operator': operator,
             'limit': limit,
@@ -22,8 +21,21 @@ class ApiKnowledge:
         if source:
             params['source'] = source
 
-        response = requests.get(self.url, params=params)
+        response = requests.get(f'{self.url}/search/{query}/', params=params)
         return response.json()
+
+
+def build_message_body(result_data, numeration_from=1):
+    links = []
+    github_url = result_data['path']
+    results = result_data['results']
+    for index, result in enumerate(results, numeration_from):
+        title = result['title']
+        links.append(f'{index}. [{title}]({github_url}{title}.md)')
+
+    links = '\n'.join(links)
+    count = result_data['count']
+    return f'Найдено результатов: {count}\n\n{links}'
 
 
 @api_view(('POST',))
@@ -37,6 +49,7 @@ def telegram_hook(request, token):
         chat_from = message.get('chat')
         reply_to_message = message.get('reply_to_message')
         message_text = message.get('text')
+        message_id = message.get('message_id')
 
         if message_text:# and message_text.startswith('.s '):
             #_, query = message_text.split(None, 1)
@@ -45,42 +58,90 @@ def telegram_hook(request, token):
             api_knowledge = ApiKnowledge()
             result_data = api_knowledge.note_search(query)
 
-            links = []
-            github_url = result_data['path']
-            results = result_data['results']
-            for index, result in enumerate(results, 1):
-                title = result['title']
-                links.append(f'{index}. [{title}]({github_url}{title}.md)')
+            limit = 10
+            offset = 0
 
             btn_prev = {
-                'text': '< prev',
-                'callback_data': '{offset-limit}',
-            }
-            btn_next = {
-                'text': 'next >',
-                'callback_data': '{offset+limit}',
+                'text': ' ',
+                'callback_data': 'none',
             }
 
-            #page_count = result_data['count'] // limit + (1 if result_data['count'] % limit > 0 else 0)
-            #page_num = offset // limit
-            #btn_count_pages = {
-            #    'text': '{page_num}/{page_count}',
-            #    'callback_data': 'none',
-            #}
+            page_count = result_data['count'] // limit + (1 if result_data['count'] % limit > 0 else 0)
+            page_num = offset // limit + 1
+            btn_count_pages = {
+                'text': f'{page_num}/{page_count}',
+                'callback_data': 'none',
+            }
+
+            btn_next = {
+                'text': 'next >>' if page_count > 1 else ' ',
+                'callback_data': f'{offset+limit} {message_id}' if page_count > 1 else 'none',
+            }
 
             reply_markup = {
-                'inline_keyboard': [[btn_prev, btn_next], [btn_prev, btn_next]]
+                'inline_keyboard': [[btn_prev, btn_count_pages, btn_next]]
             }
 
             params = {
                 'chat_id': chat_from['id'],
-                'text': '\n'.join(links),
+                'text': build_message_body(result_data),
                 'reply_to_message_id': message['message_id'],
                 'disable_web_page_preview': True,
                 'parse_mode': 'Markdown',
-                #'reply_markup': reply_markup,
+                'reply_markup': reply_markup,
             }
-            res = requests.get(f'{url}/sendMessage', params=params)
+            res = requests.post(f'{url}/sendMessage', json=params)
             res = res.json()
+
+    callback_query = request.data.get('callback_query')
+    if callback_query:
+        results_message = callback_query['message']
+        results_message_id = results_message['message_id']
+        if callback_query['data'] == 'none':
+            return Response(status=status.HTTP_200_OK, data={})
+
+        offset, query_message_id = callback_query['data'].split()
+        offset = int(offset)
+
+        query = results_message['reply_to_message']['text']
+        #query = 'test'
+        api_knowledge = ApiKnowledge()
+        result_data = api_knowledge.note_search(query, offset=int(offset))
+
+        limit = 10
+
+        page_count = result_data['count'] // limit + (1 if result_data['count'] % limit > 0 else 0)
+        page_num = offset // limit + 1
+        btn_count_pages = {
+            'text': f'{page_num}/{page_count}',
+            'callback_data': 'none',
+        }
+
+        btn_prev = {
+            'text': '<< prev' if page_num > 1 else ' ',
+            'callback_data': f'{offset-limit} {results_message_id}' if page_num > 1 else 'none',
+        }
+
+        btn_next = {
+            'text': 'next >>' if page_num < page_count else ' ',
+            'callback_data': f'{offset+limit} {results_message_id}' if page_num < page_count else 'none',
+        }
+
+        reply_markup = {
+            'inline_keyboard': [[btn_prev, btn_count_pages, btn_next]]
+        }
+
+        params = {
+            'chat_id': results_message.get('chat').get('id'),
+            'message_id': results_message.get('message_id'),
+            #'inline_message_id': results_message.get('message_id'),
+            'text': build_message_body(result_data, offset+1),
+            #'reply_to_message_id': message['message_id'],
+            'disable_web_page_preview': True,
+            'parse_mode': 'Markdown',
+            'reply_markup': reply_markup,
+        }
+        res = requests.post(f'{url}/editMessageText', json=params)
+        res = res.json()
 
     return Response(status=status.HTTP_200_OK, data={})

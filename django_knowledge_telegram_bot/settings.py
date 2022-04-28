@@ -12,8 +12,8 @@ environ.Env.read_env(env_file=os.path.join(BASE_DIR, '.env'))
 
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 DEBUG = env('DEBUG')
-ROOT_URLCONF = 'django_knowledge.urls'
-WSGI_APPLICATION = 'django_knowledge.wsgi.application'
+ROOT_URLCONF = 'django_knowledge_telegram_bot.urls'
+WSGI_APPLICATION = 'django_knowledge_telegram_bot.wsgi.application'
 STATIC_URL = '/static/'
 
 INSTALLED_APPS = [
@@ -84,3 +84,4 @@ LOGGING = {
 # KNOWLEDGE
 
 URL_KNOWLEDGE = env('URL_KNOWLEDGE')
+TELEGRAM_TOKEN = env('TELEGRAM_TOKEN')
