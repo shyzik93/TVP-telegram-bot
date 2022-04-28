@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 from django.conf import settings
 from rest_framework.decorators import api_view, renderer_classes
 from rest_framework.response import Response
@@ -31,7 +33,8 @@ def build_message_body(result_data, numeration_from=1):
     results = result_data['results']
     for index, result in enumerate(results, numeration_from):
         title = result['title']
-        links.append(f'{index}. [{title}]({github_url}{title}.md)')
+        quoted_title = quote(title)
+        links.append(f'{index}. [{title}]({github_url}db/{quoted_title}.md)')
 
     links = '\n'.join(links)
     count = result_data['count']
@@ -45,9 +48,7 @@ def telegram_hook(request, token):
 
     message = request.data.get('message')
     if message:
-        user_from = message.get('from')
         chat_from = message.get('chat')
-        reply_to_message = message.get('reply_to_message')
         message_text = message.get('text')
         message_id = message.get('message_id')
 
@@ -85,13 +86,12 @@ def telegram_hook(request, token):
             params = {
                 'chat_id': chat_from['id'],
                 'text': build_message_body(result_data),
-                'reply_to_message_id': message['message_id'],
+                'reply_to_message_id': message_id,
                 'disable_web_page_preview': True,
                 'parse_mode': 'Markdown',
                 'reply_markup': reply_markup,
             }
-            res = requests.post(f'{url}/sendMessage', json=params)
-            res = res.json()
+            requests.post(f'{url}/sendMessage', json=params)
 
     callback_query = request.data.get('callback_query')
     if callback_query:
@@ -104,7 +104,6 @@ def telegram_hook(request, token):
         offset = int(offset)
 
         query = results_message['reply_to_message']['text']
-        #query = 'test'
         api_knowledge = ApiKnowledge()
         result_data = api_knowledge.note_search(query, offset=int(offset))
 
@@ -134,14 +133,11 @@ def telegram_hook(request, token):
         params = {
             'chat_id': results_message.get('chat').get('id'),
             'message_id': results_message.get('message_id'),
-            #'inline_message_id': results_message.get('message_id'),
             'text': build_message_body(result_data, offset+1),
-            #'reply_to_message_id': message['message_id'],
             'disable_web_page_preview': True,
             'parse_mode': 'Markdown',
             'reply_markup': reply_markup,
         }
-        res = requests.post(f'{url}/editMessageText', json=params)
-        res = res.json()
+        requests.post(f'{url}/editMessageText', json=params)
 
     return Response(status=status.HTTP_200_OK, data={})
