@@ -41,6 +41,29 @@ def build_message_body(result_data, numeration_from=1):
     return f'Найдено результатов: {count}\n\n{links}'
 
 
+def build_paginator_params(count_objects, limit, offset, results_message_id):
+    page_count = count_objects // limit + (1 if count_objects % limit > 0 else 0)
+    page_num = offset // limit + 1
+    btn_count_pages = {
+        'text': f'{page_num}/{page_count}',
+        'callback_data': 'none',
+    }
+
+    btn_prev = {
+        'text': '<< prev' if page_num > 1 else ' ',
+        'callback_data': f'{offset - limit} {results_message_id}' if page_num > 1 else 'none',
+    }
+
+    btn_next = {
+        'text': 'next >>' if page_num < page_count else ' ',
+        'callback_data': f'{offset + limit} {results_message_id}' if page_num < page_count else 'none',
+    }
+
+    return {
+        'inline_keyboard': [[btn_prev, btn_count_pages, btn_next]]
+    }
+
+
 @api_view(('POST',))
 @renderer_classes((JSONRenderer,))
 def telegram_hook(request, token):
@@ -61,28 +84,7 @@ def telegram_hook(request, token):
 
             limit = 10
             offset = 0
-
-            btn_prev = {
-                'text': ' ',
-                'callback_data': 'none',
-            }
-
-            page_count = result_data['count'] // limit + (1 if result_data['count'] % limit > 0 else 0)
-            page_num = offset // limit + 1
-            btn_count_pages = {
-                'text': f'{page_num}/{page_count}',
-                'callback_data': 'none',
-            }
-
-            btn_next = {
-                'text': 'next >>' if page_count > 1 else ' ',
-                'callback_data': f'{offset+limit} {message_id}' if page_count > 1 else 'none',
-            }
-
-            reply_markup = {
-                'inline_keyboard': [[btn_prev, btn_count_pages, btn_next]]
-            }
-
+            reply_markup = build_paginator_params(result_data['count'], limit, offset, message_id)
             params = {
                 'chat_id': chat_from['id'],
                 'text': build_message_body(result_data),
@@ -108,28 +110,7 @@ def telegram_hook(request, token):
         result_data = api_knowledge.note_search(query, offset=int(offset))
 
         limit = 10
-
-        page_count = result_data['count'] // limit + (1 if result_data['count'] % limit > 0 else 0)
-        page_num = offset // limit + 1
-        btn_count_pages = {
-            'text': f'{page_num}/{page_count}',
-            'callback_data': 'none',
-        }
-
-        btn_prev = {
-            'text': '<< prev' if page_num > 1 else ' ',
-            'callback_data': f'{offset-limit} {results_message_id}' if page_num > 1 else 'none',
-        }
-
-        btn_next = {
-            'text': 'next >>' if page_num < page_count else ' ',
-            'callback_data': f'{offset+limit} {results_message_id}' if page_num < page_count else 'none',
-        }
-
-        reply_markup = {
-            'inline_keyboard': [[btn_prev, btn_count_pages, btn_next]]
-        }
-
+        reply_markup = build_paginator_params(result_data['count'], limit, offset, results_message_id)
         params = {
             'chat_id': results_message.get('chat').get('id'),
             'message_id': results_message.get('message_id'),
