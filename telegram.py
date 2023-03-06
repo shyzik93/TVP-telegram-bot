@@ -1,30 +1,9 @@
 from urllib.parse import quote
 
-from django.conf import settings
-from rest_framework.decorators import api_view, renderer_classes
-from rest_framework.response import Response
-from rest_framework.renderers import JSONRenderer
-from rest_framework import status
 import requests
 
-
-class ApiKnowledge:
-    def __init__(self):
-        self.url = f'{settings.URL_KNOWLEDGE}/api/v1/note/'
-
-    def note_search(self, query, search_by='all', operator='or', limit=10, offset=0, fields='title', source=None):
-        params = {
-            'search-by': search_by,
-            'operator': operator,
-            'limit': limit,
-            'offset': offset,
-            'fields': fields,
-        }
-        if source:
-            params['source'] = source
-
-        response = requests.get(f'{self.url}/search/{query}/', params=params)
-        return response.json()
+import settings
+from knowledge_interface import ApiKnowledge
 
 
 def build_message_body(result_data, numeration_from=1):
@@ -64,19 +43,15 @@ def build_paginator_params(count_objects, objects_per_page, offset):
     }
 
 
-@api_view(('POST',))
-@renderer_classes((JSONRenderer,))
-def telegram_hook(request, token):
+def telegram_hook_search_note(request, token):
     url = f'https://api.telegram.org/bot{settings.TELEGRAM_TOKEN}'
 
-    message = request.data.get('message')
+    message = request.get('message')
     if message:
         chat_from = message.get('chat')
-        message_text = message.get('text')
+        message_text = message.get('text', '')
         message_id = message.get('message_id')
-
-        if message_text:# and message_text.startswith('.s '):
-            #_, query = message_text.split(None, 1)
+        if message_text:
             query = message_text
 
             api_knowledge = ApiKnowledge()
@@ -95,10 +70,10 @@ def telegram_hook(request, token):
             }
             requests.post(f'{url}/sendMessage', json=params)
 
-    callback_query = request.data.get('callback_query')
+    callback_query = request.get('callback_query')
     if callback_query:
         if callback_query['data'] == 'none':
-            return Response(status=status.HTTP_200_OK, data={})
+            return {}
 
         results_message = callback_query['message']
         offset = int(callback_query['data'])
@@ -119,4 +94,5 @@ def telegram_hook(request, token):
         }
         requests.post(f'{url}/editMessageText', json=params)
 
-    return Response(status=status.HTTP_200_OK, data={})
+    return {}
+
